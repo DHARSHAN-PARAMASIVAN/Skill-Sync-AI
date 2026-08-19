@@ -178,5 +178,49 @@ export const api = {
     if (!response.ok) throw new Error('Failed to calculate score');
     const data = await response.json();
     return data.score;
+  },
+
+  async analyzeResume(resumeText: string, studentId?: number): Promise<any> {
+    const response = await fetch(`${API_URL}/ai/analyze-resume`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resumeText, studentId }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ detail: 'Failed to analyze resume' }));
+      throw new Error(err.detail || 'Failed to analyze resume');
+    }
+    return response.json();
+  },
+
+  async getSkillGap(params: {
+    studentSkills: string[];
+    targetInternshipId?: number;
+    targetSkills?: string[];
+    careerGoal?: string;
+  }): Promise<any> {
+    const response = await fetch(`${API_URL}/ai/skill-gap`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    if (!response.ok) throw new Error('Failed to fetch skill gap analysis');
+    return response.json();
+  },
+
+  async getLearningRoadmap(params: {
+    studentId?: number;
+    missingSkills?: string[];
+    careerGoal?: string;
+    currentSkills?: string[];
+  }): Promise<any> {
+    const response = await fetch(`${API_URL}/ai/roadmap`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    if (!response.ok) throw new Error('Failed to generate learning roadmap');
+    return response.json();
   }
 };
+

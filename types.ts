@@ -97,3 +97,82 @@ export interface InterviewReport {
         keywordUsage: string;
     };
 }
+
+// Types for AI-Driven Integrations
+export interface ProjectItem {
+    title: string;
+    description: string;
+    technologies: string[];
+}
+
+export interface EducationItem {
+    degree: string;
+    institution: string;
+    yearOrGrade?: string;
+}
+
+export interface ResumeAnalysisResult {
+    name?: string;
+    email?: string;
+    phone?: string;
+    summaryBio: string;
+    skills: string[];
+    projects: ProjectItem[];
+    certifications: string[];
+    education: EducationItem[];
+    strengths: string[];
+    improvementSuggestions: string[];
+}
+
+export interface MissingSkillDetail {
+    skill: string;
+    priority: 'High' | 'Medium' | 'Low';
+    reason: string;
+    estimatedTimeToLearn: string;
+}
+
+export interface SkillGapResult {
+    matchPercentage: number;
+    possessedSkills: string[];
+    missingSkills: MissingSkillDetail[];
+    recommendationSummary: string;
+}
+
+export interface CourseSuggestion {
+    title: string;
+    provider: string;
+    duration: string;
+    level: string;
+    skillsCovered: string[];
+}
+
+export interface ProjectSuggestion {
+    title: string;
+    description: string;
+    techStack: string[];
+    portfolioValue: string;
+}
+
+export interface CertificationSuggestion {
+    name: string;
+    issuingOrg: string;
+    recognition: string;
+}
+
+export interface LearningRoadmapPhase {
+    phaseNumber: number;
+    phaseTitle: string;
+    duration: string;
+    goals: string[];
+    courses: CourseSuggestion[];
+    projects: ProjectSuggestion[];
+    certifications: CertificationSuggestion[];
+}
+
+export interface LearningRoadmap {
+    studentName: string;
+    careerGoal: string;
+    totalDurationWeeks: number;
+    phases: LearningRoadmapPhase[];
+    keyTakeaway: string;
+}

@@ -59,45 +59,31 @@ npm install
 npm run dev
 ```
 
-➜ Frontend Application: **`http://localhost:5173`**
-
-To build for production:
-```bash
-npm run build
-```
+➜ Frontend Application will open at: **`http://localhost:5173`**
 
 ---
 
-### 2️⃣ Backend REST API Setup
+### 2️⃣ Backend Setup (FastAPI & Groq AI)
+
+Make sure MongoDB is running (locally on `mongodb://localhost:27017` or configured in `backend/.env`).
 
 ```bash
 # 1. Navigate to the backend directory
 cd backend
 
-# 2. Create and activate a Virtual Environment
-# On Windows (PowerShell):
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-
-# On macOS/Linux:
-python3 -m venv venv
-source venv/bin/activate
-
-# 3. Install required Python packages
+# 2. Activate virtual environment (if using one) or install requirements
 pip install -r requirements.txt
 
-# 4. Set up Environment Variables (.env)
-# Create a .env file inside backend directory with:
-MONGODB_URL=mongodb://localhost:27017
-DATABASE_NAME=pm_internship_db
-GEMINI_API_KEY=your_google_gemini_api_key
-SECRET_KEY=your_super_secret_jwt_key
+# 3. (Optional) Seed the database with sample internships and students
+python seed_db.py
 
-# 5. Start the FastAPI server with auto-reload
-uvicorn app.main:app --reload
+# 4. Start the FastAPI server
+uvicorn app.main:app --reload --port 8000
 ```
 
 ➜ Backend Server: **`http://127.0.0.1:8000`**
+➜ Interactive Swagger Docs: **`http://127.0.0.1:8000/docs`**
+
 
 ---
 

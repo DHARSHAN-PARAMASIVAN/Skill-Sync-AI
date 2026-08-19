@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Student } from '../types';
+import { Student, ResumeAnalysisResult } from '../types';
 import Card from './common/Card';
 import Button from './common/Button';
 import CustomSelect from './common/CustomSelect';
-import { PencilIcon, XMarkIcon } from './common/Icons';
+import { PencilIcon, XMarkIcon, SparklesIcon, CheckBadgeIcon, ArrowPathIcon } from './common/Icons';
+import { api } from '../services/api';
 
 const SKILL_OPTIONS = [
     'React', 'Node.js', 'Python', 'SQL', 'Data Analysis', 'Machine Learning',
@@ -26,11 +27,8 @@ interface ProfileProps {
     readOnly?: boolean;
 }
 
-import { api } from '../services/api';
-
 const Profile: React.FC<ProfileProps> = ({ student, onUpdateStudent, readOnly = false }) => {
     const [isEditing, setIsEditing] = useState(false);
-    // Initialize with safe defaults for legacy data
     const [formData, setFormData] = useState({
         ...student,
         skills: student.skills || [],
@@ -41,6 +39,13 @@ const Profile: React.FC<ProfileProps> = ({ student, onUpdateStudent, readOnly = 
         preferredCompanySize: student.preferredCompanySize || '',
         preferredDuration: student.preferredDuration || ''
     });
+
+    // AI Resume Analyzer States
+    const [resumeText, setResumeText] = useState('');
+    const [isAnalyzingResume, setIsAnalyzingResume] = useState(false);
+    const [resumeAnalysis, setResumeAnalysis] = useState<ResumeAnalysisResult | null>(null);
+    const [resumeUploadSuccess, setResumeUploadSuccess] = useState(false);
+    const [selectedExtractedSkills, setSelectedExtractedSkills] = useState<string[]>([]);
 
     const handleEditToggle = () => {
         if (!isEditing) {
@@ -62,11 +67,10 @@ const Profile: React.FC<ProfileProps> = ({ student, onUpdateStudent, readOnly = 
         e.preventDefault();
         try {
             const updatedStudent = await api.updateStudent(student.id, formData);
-            onUpdateStudent(updatedStudent);
+            if (onUpdateStudent) onUpdateStudent(updatedStudent);
             setIsEditing(false);
         } catch (error) {
             console.error("Failed to update profile", error);
-            // Ideally show a toast here
             alert("Failed to save profile. Please try again.");
         }
     };
@@ -90,12 +94,79 @@ const Profile: React.FC<ProfileProps> = ({ student, onUpdateStudent, readOnly = 
         }));
     };
 
-    const ProfileDetail: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
-        <div>
-            <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">{label}</h3>
-            <div className="mt-1 text-md text-gray-800 dark:text-white">{value}</div>
-        </div>
-    );
+    // AI Resume Upload Handler
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        // Read text from uploaded file
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            const content = event.target?.result as string;
+            if (content) {
+                setResumeText(content);
+                await runResumeAnalysis(content);
+            }
+        };
+        reader.readAsText(file);
+    };
+
+    const runResumeAnalysis = async (textToAnalyze?: string) => {
+        const text = textToAnalyze || resumeText;
+        if (!text.trim()) {
+            alert("Please provide resume text or upload a resume file.");
+            return;
+        }
+
+        setIsAnalyzingResume(true);
+        setResumeAnalysis(null);
+        setResumeUploadSuccess(false);
+
+        try {
+            const result: ResumeAnalysisResult = await api.analyzeResume(text, student.id);
+            setResumeAnalysis(result);
+            setSelectedExtractedSkills(result.skills || []);
+            setResumeUploadSuccess(true);
+        } catch (error) {
+            console.error("Resume analysis failed", error);
+            alert("Failed to analyze resume. Please try again.");
+        } finally {
+            setIsAnalyzingResume(false);
+        }
+    };
+
+    const handleSyncToProfile = async () => {
+        if (!resumeAnalysis) return;
+
+        const mergedSkills = Array.from(new Set([...formData.skills, ...selectedExtractedSkills]));
+        const mergedQualifications = Array.from(
+            new Set([
+                ...formData.qualifications,
+                ...(resumeAnalysis.education || []).map(e => `${e.degree} - ${e.institution}`),
+                ...(resumeAnalysis.certifications || [])
+            ])
+        );
+
+        const newGoals = resumeAnalysis.summaryBio || formData.careerGoals;
+
+        const updatedData = {
+            ...formData,
+            skills: mergedSkills,
+            qualifications: mergedQualifications,
+            careerGoals: newGoals
+        };
+
+        setFormData(updatedData);
+
+        try {
+            const updatedStudent = await api.updateStudent(student.id, updatedData);
+            if (onUpdateStudent) onUpdateStudent(updatedStudent);
+            alert("Profile successfully updated with AI extracted details!");
+        } catch (error) {
+            console.error("Failed to sync resume to profile", error);
+            alert("Updated locally, but failed to save to server.");
+        }
+    };
 
     return (
         <div className="max-w-5xl mx-auto space-y-8 animate-fade-in-up">
@@ -134,6 +205,196 @@ const Profile: React.FC<ProfileProps> = ({ student, onUpdateStudent, readOnly = 
                     )}
                 </div>
             </div>
+
+            {/* Feature 1: AI Resume Analysis Card */}
+            {!readOnly && (
+                <div className="bg-gradient-to-br from-indigo-50/70 via-purple-50/40 to-white dark:from-gray-800 dark:via-gray-800 dark:to-gray-900 rounded-[2.5rem] shadow-premium p-8 border border-indigo-100/80 dark:border-gray-700 space-y-6">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="space-y-1">
+                            <div className="inline-flex items-center space-x-2 px-3 py-1 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-full text-xs font-bold uppercase tracking-wider">
+                                <SparklesIcon className="h-3.5 w-3.5" />
+                                <span>AI Feature 1 • Groq Powered</span>
+                            </div>
+                            <h2 className="text-2xl font-display font-bold text-gray-900 dark:text-white">AI Resume Analysis & Skill Extraction</h2>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                                Upload or paste your resume. Our AI extracts your core skills, real-world projects, certifications, and education details automatically.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+                        {/* Resume Input Area */}
+                        <div className="space-y-4">
+                            <div className="border-2 border-dashed border-indigo-200 dark:border-indigo-800 rounded-2xl p-6 text-center hover:border-indigo-400 transition-colors bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm">
+                                <input
+                                    type="file"
+                                    id="resume-file-input"
+                                    accept=".txt,.pdf,.doc,.docx"
+                                    onChange={handleFileUpload}
+                                    className="hidden"
+                                />
+                                <label
+                                    htmlFor="resume-file-input"
+                                    className="cursor-pointer flex flex-col items-center justify-center space-y-2"
+                                >
+                                    <div className="w-12 h-12 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 rounded-full flex items-center justify-center">
+                                        <SparklesIcon className="h-6 w-6" />
+                                    </div>
+                                    <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                                        Click to upload Resume (TXT / PDF text)
+                                    </span>
+                                    <span className="text-xs text-gray-400">Or paste your resume text below</span>
+                                </label>
+                            </div>
+
+                            <textarea
+                                value={resumeText}
+                                onChange={(e) => setResumeText(e.target.value)}
+                                placeholder="Paste resume plain text here (experience, skills, projects, degrees)..."
+                                rows={4}
+                                className="w-full rounded-2xl border-gray-200 dark:bg-gray-900 dark:border-gray-700 dark:text-white shadow-sm p-4 text-xs font-mono focus:border-indigo-500 focus:ring-indigo-500"
+                            />
+
+                            <div className="flex gap-3">
+                                <Button
+                                    onClick={() => runResumeAnalysis()}
+                                    disabled={isAnalyzingResume || !resumeText.trim()}
+                                    variant="primary"
+                                    className="!rounded-xl px-6 bg-indigo-600 hover:bg-indigo-700"
+                                >
+                                    {isAnalyzingResume ? (
+                                        <span className="flex items-center gap-2">
+                                            <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                                            Analyzing with Groq AI...
+                                        </span>
+                                    ) : (
+                                        <span className="flex items-center gap-2">
+                                            <SparklesIcon className="h-4 w-4" />
+                                            Extract with AI
+                                        </span>
+                                    )}
+                                </Button>
+                                {resumeText && (
+                                    <Button
+                                        onClick={() => { setResumeText(''); setResumeAnalysis(null); }}
+                                        variant="light"
+                                        className="!rounded-xl text-xs"
+                                    >
+                                        Clear
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Extracted Preview */}
+                        <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 border border-gray-200 dark:border-gray-700 shadow-sm min-h-[220px]">
+                            {isAnalyzingResume ? (
+                                <div className="flex flex-col items-center justify-center h-48 space-y-3">
+                                    <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+                                    <p className="text-sm font-medium text-gray-500 animate-pulse">Extracting skills, projects, and credentials...</p>
+                                </div>
+                            ) : resumeAnalysis ? (
+                                <div className="space-y-4 animate-in fade-in">
+                                    <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-800">
+                                        <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-bold text-sm">
+                                            <CheckBadgeIcon className="h-5 w-5" />
+                                            <span>AI Extraction Complete</span>
+                                        </div>
+                                        <Button
+                                            onClick={handleSyncToProfile}
+                                            variant="primary"
+                                            size="sm"
+                                            className="!rounded-xl bg-emerald-600 hover:bg-emerald-700 text-xs"
+                                        >
+                                            ⚡ Sync to Profile
+                                        </Button>
+                                    </div>
+
+                                    {/* Extracted Skills */}
+                                    <div>
+                                        <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">
+                                            Extracted Skills ({resumeAnalysis.skills.length})
+                                        </h4>
+                                        <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                                            {resumeAnalysis.skills.map(skill => (
+                                                <span
+                                                    key={skill}
+                                                    onClick={() => {
+                                                        setSelectedExtractedSkills(prev =>
+                                                            prev.includes(skill) ? prev.filter(s => s !== skill) : [...prev, skill]
+                                                        );
+                                                    }}
+                                                    className={`px-2.5 py-1 rounded-lg text-xs font-medium cursor-pointer transition-all ${
+                                                        selectedExtractedSkills.includes(skill)
+                                                            ? 'bg-indigo-600 text-white'
+                                                            : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 opacity-60'
+                                                    }`}
+                                                >
+                                                    {skill} {selectedExtractedSkills.includes(skill) ? '✓' : '+'}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Extracted Projects */}
+                                    {resumeAnalysis.projects && resumeAnalysis.projects.length > 0 && (
+                                        <div>
+                                            <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">
+                                                Key Projects
+                                            </h4>
+                                            <div className="space-y-2 max-h-28 overflow-y-auto">
+                                                {resumeAnalysis.projects.map((proj, idx) => (
+                                                    <div key={idx} className="p-2.5 bg-gray-50 dark:bg-gray-800 rounded-xl text-xs">
+                                                        <div className="font-bold text-gray-800 dark:text-gray-200">{proj.title}</div>
+                                                        <div className="text-gray-500 dark:text-gray-400 text-[11px] mt-0.5">{proj.description}</div>
+                                                        <div className="flex gap-1 mt-1 flex-wrap">
+                                                            {proj.technologies.map(t => (
+                                                                <span key={t} className="text-[10px] bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 px-1.5 py-0.5 rounded">
+                                                                    {t}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Education & Certs */}
+                                    <div className="grid grid-cols-2 gap-2 text-xs">
+                                        <div>
+                                            <h4 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Education</h4>
+                                            <div className="space-y-1">
+                                                {resumeAnalysis.education.map((edu, idx) => (
+                                                    <div key={idx} className="text-gray-700 dark:text-gray-300 font-medium">
+                                                        {edu.degree} ({edu.yearOrGrade || 'Graduated'})
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <h4 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Certifications</h4>
+                                            <div className="space-y-1">
+                                                {resumeAnalysis.certifications.slice(0, 2).map((cert, idx) => (
+                                                    <div key={idx} className="text-gray-700 dark:text-gray-300 font-medium truncate">
+                                                        🎖️ {cert}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center h-48 text-center text-gray-400 space-y-2">
+                                    <SparklesIcon className="h-8 w-8 text-indigo-300 dark:text-indigo-700" />
+                                    <p className="text-xs">No resume analyzed yet.</p>
+                                    <p className="text-[11px] max-w-xs text-gray-400">Upload or paste your resume on the left and click "Extract with AI" to view structured results.</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {isEditing ? (
                 <form onSubmit={handleSave} className="bg-white dark:bg-gray-800 rounded-[2.5rem] shadow-premium p-10 border border-gray-100 dark:border-gray-700 space-y-8">

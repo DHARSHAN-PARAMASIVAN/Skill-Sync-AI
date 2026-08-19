@@ -5,8 +5,10 @@ class Settings(BaseSettings):
     DATABASE_NAME: str = "smart_allocation_db"
     OPENROUTER_API_KEY: str | None = None
     GEMINI_API_KEY: str | None = None
+    GROQ_API_KEY: str | None = None
 
     class Config:
         env_file = ".env", "../.env.local"
 
 settings = Settings()
+
