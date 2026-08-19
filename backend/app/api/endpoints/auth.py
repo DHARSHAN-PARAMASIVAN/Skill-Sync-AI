@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Body
-from app.models.schemas import Student, StudentResponse
+from app.models.schemas import Student, StudentResponse, Company, CompanyResponse, Admin, AdminResponse
 from passlib.context import CryptContext
 from pydantic import BaseModel
 from typing import List, Optional
@@ -9,14 +9,15 @@ router = APIRouter()
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
 class LoginRequest(BaseModel):
-    phoneNumber: str
+    phoneNumber: Optional[str] = None
+    email: Optional[str] = None
     password: str
 
 class RegisterRequest(BaseModel):
     name: str
     phoneNumber: str
+    email: Optional[str] = None
     password: str
-    # Optional Profile Details
     careerGoals: Optional[str] = None
     skills: List[str] = []
     locationPreference: Optional[str] = None
@@ -37,25 +38,44 @@ class CompanyRegisterRequest(BaseModel):
     location: Optional[str] = None
     size: Optional[str] = None
 
-def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
+class AdminLoginRequest(BaseModel):
+    email: str
+    password: str
 
-def get_password_hash(password):
+class AdminRegisterRequest(BaseModel):
+    name: str
+    email: str
+    password: str
+
+def verify_password(plain_password: str, hashed_password: Optional[str]) -> bool:
+    if not hashed_password:
+        return False
+    # If password is plain text in legacy data or matches direct
+    if plain_password == hashed_password:
+        return True
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except Exception:
+        return plain_password == hashed_password
+
+def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
+
+# ---------------- Student Auth ----------------
 
 @router.post("/register", response_model=StudentResponse)
 async def register(data: RegisterRequest):
-    # Check if phone number already exists
     existing_student = await Student.find_one(Student.phoneNumber == data.phoneNumber)
     if existing_student:
         raise HTTPException(status_code=400, detail="Phone number already registered")
 
-    # Hash password
+    if data.email:
+        existing_email = await Student.find_one(Student.email == data.email)
+        if existing_email:
+            raise HTTPException(status_code=400, detail="Email already registered")
+
     hashed_password = get_password_hash(data.password)
 
-    # Create new student
-    # Note: Using a simple incremental ID for now as per schema requirements.
-    # We sort by -Student.id (descending) to find the max ID.
     last_student = await Student.find_all().sort(-Student.id).first_or_none()
     new_id = (last_student.id + 1) if last_student else 1
 
@@ -63,6 +83,7 @@ async def register(data: RegisterRequest):
         id=new_id,
         name=data.name,
         phoneNumber=data.phoneNumber,
+        email=data.email or f"student{new_id}@example.com",
         password=hashed_password,
         role="STUDENT",
         careerGoals=data.careerGoals,
@@ -79,28 +100,33 @@ async def register(data: RegisterRequest):
 
 @router.post("/login", response_model=StudentResponse)
 async def login(data: LoginRequest):
-    student = await Student.find_one(Student.phoneNumber == data.phoneNumber)
+    student = None
+    if data.phoneNumber:
+        student = await Student.find_one(Student.phoneNumber == data.phoneNumber)
+    if not student and data.email:
+        student = await Student.find_one(Student.email == data.email)
+    if not student and data.phoneNumber and "@" in data.phoneNumber:
+        # User entered email in phone field
+        student = await Student.find_one(Student.email == data.phoneNumber)
+
     if not student:
-        raise HTTPException(status_code=400, detail="Invalid phone number or password")
+        raise HTTPException(status_code=400, detail="Account not found. Please register or check credentials.")
     
     if not verify_password(data.password, student.password):
-        raise HTTPException(status_code=400, detail="Invalid phone number or password")
+        raise HTTPException(status_code=400, detail="Invalid password.")
     
     return student
 
-from app.models.schemas import Company, CompanyResponse
+# ---------------- Company Auth ----------------
 
 @router.post("/company/register", response_model=CompanyResponse)
 async def register_company(data: CompanyRegisterRequest):
-    # Check if company email already exists
     existing_company = await Company.find_one(Company.email == data.email)
     if existing_company:
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    # Hash password
     hashed_password = get_password_hash(data.password)
 
-    # Create new company
     last_company = await Company.find_all().sort(-Company.id).first_or_none()
     new_id = (last_company.id + 1) if last_company else 1
 
@@ -119,7 +145,6 @@ async def register_company(data: CompanyRegisterRequest):
     await new_company.insert()
     return new_company
 
-
 @router.post("/company/login", response_model=CompanyResponse)
 async def login_company(data: CompanyLoginRequest):
     company = await Company.find_one(Company.email == data.email)
@@ -131,20 +156,10 @@ async def login_company(data: CompanyLoginRequest):
     
     return company
 
-from app.models.schemas import Admin, AdminResponse
-
-class AdminLoginRequest(BaseModel):
-    email: str
-    password: str
-
-class AdminRegisterRequest(BaseModel):
-    name: str
-    email: str
-    password: str
+# ---------------- Admin Auth ----------------
 
 @router.post("/admin/register", response_model=AdminResponse)
 async def register_admin(data: AdminRegisterRequest):
-    # Check if admin already exists
     existing_admin = await Admin.find_one(Admin.email == data.email)
     if existing_admin:
         raise HTTPException(status_code=400, detail="Email already registered")
